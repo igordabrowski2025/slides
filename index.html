@@ -713,7 +713,7 @@
       window.open(pdfUrl, '_blank'); // Otwiera finalny PDF w nowej karcie
     }
 
-    // Nowa funkcja: wyświetlenie podglądu inwestycji w popupie przy użyciu PDF.js
+    // Nowa funkcja: wyświetlenie podglądu inwestycji w popupie przy użyciu PDF.js – renderowanie wszystkich stron PDF
     function showInvestmentPreview(investorName) {
       // Filtrowanie slajdów pasujących do wybranej inwestycji (porównanie case-insensitive)
       const matchingSlides = allSlides.filter(slide => toTitleCase(slide.investor) === investorName);
@@ -726,31 +726,35 @@
       // Czyszczenie poprzednich podglądów
       const previewsContainer = document.getElementById('modalPreviews');
       previewsContainer.innerHTML = '';
-      // Dla każdego pasującego slajdu – renderujemy PDF na canvasie
+      
+      // Dla każdego pasującego slajdu – renderujemy wszystkie strony PDF
       matchingSlides.forEach(slide => {
         const slideContainer = document.createElement('div');
         slideContainer.style.marginBottom = '20px';
-        const canvas = document.createElement('canvas');
-        slideContainer.appendChild(canvas);
         previewsContainer.appendChild(slideContainer);
-
+        
         pdfjsLib.getDocument(slide.file_url).promise.then(function(pdfDoc) {
-          // Renderujemy pierwszą stronę jako podgląd
-          pdfDoc.getPage(1).then(function(page) {
-            const viewport = page.getViewport({ scale: 1.5 });
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            const renderContext = {
-              canvasContext: canvas.getContext('2d'),
-              viewport: viewport
-            };
-            page.render(renderContext);
-          });
+          // Iterujemy przez wszystkie strony PDF
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            pdfDoc.getPage(i).then(function(page) {
+              const viewport = page.getViewport({ scale: 1.5 });
+              const canvas = document.createElement('canvas');
+              canvas.height = viewport.height;
+              canvas.width = viewport.width;
+              const renderContext = {
+                canvasContext: canvas.getContext('2d'),
+                viewport: viewport
+              };
+              page.render(renderContext);
+              slideContainer.appendChild(canvas);
+            });
+          }
         }).catch(function(error) {
           console.error('Error loading PDF:', error);
           slideContainer.innerHTML = 'Błąd ładowania podglądu PDF.';
         });
       });
+      
       // Wyświetlenie modala
       document.getElementById('investmentPreviewModal').style.display = 'flex';
     }
