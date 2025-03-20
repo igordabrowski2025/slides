@@ -318,6 +318,38 @@
       color: var(--dark-text);
     }
   </style>
+  <!-- Nowe style dla modala -->
+  <style>
+    /* Modal dla podglądu inwestycji */
+    #investmentPreviewModal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    #investmentPreviewModal .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      width: 80%;
+      max-height: 90%;
+      overflow-y: auto;
+      position: relative;
+    }
+    #investmentPreviewModal .close {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 24px;
+      cursor: pointer;
+    }
+  </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
 <body>
@@ -410,14 +442,25 @@
     <button class="btn btn-primary" id="generatePDF"><i class="fas fa-file-pdf"></i> Generuj PDF</button>
   </div>
 
+  <!-- Modal dla podglądu inwestycji -->
+  <div id="investmentPreviewModal">
+    <div class="modal-content">
+      <span class="close" id="modalCloseBtn">&times;</span>
+      <h2>Podgląd inwestycji: <span id="modalInvestmentName"></span></h2>
+      <div id="modalPreviews"></div>
+    </div>
+  </div>
+
   <!-- Skrypty -->
-  <!-- SortableJS -->
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
-  <!-- pdf-lib -->
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <!-- Dodajemy PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
+    // Konfiguracja PDF.js – ustawienie workerSrc
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
     // Funkcja konwertująca tekst do Title Case
     function toTitleCase(str) {
       return str.replace(/\w\S*/g, function(txt) {
@@ -509,7 +552,7 @@
       paginatedSlides.forEach(slide => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${toTitleCase(slide.investor)}</td>
+          <td class="investment-name" style="cursor: pointer;">${toTitleCase(slide.investor)}</td>
           <td>${toTitleCase(slide.region)}</td>
           <td>${slide.area}</td>
           <td>${toTitleCase(slide.industry)}</td>
@@ -622,9 +665,7 @@
       document.getElementById('resetFilters').style.display = 'none';
     }
 
-    // Funkcja generująca PDF przy użyciu pdf-lib
     async function generatePDFDocument() {
-      // Tworzymy nowy dokument PDF
       const pdfDoc = await PDFLib.PDFDocument.create();
 
       // 1. Pobierz wybraną usługę
@@ -658,7 +699,6 @@
       // Łączymy PDFy w kolejności: usługa, projekty, kontakt
       const pdfUrls = [serviceUrl, ...projectUrls, contactUrl];
 
-      // Pobieramy każdy PDF, kopiujemy jego strony i dodajemy do nowego dokumentu
       for (const url of pdfUrls) {
         const res = await fetch(url);
         const pdfBytes = await res.arrayBuffer();
@@ -673,6 +713,53 @@
       window.open(pdfUrl, '_blank'); // Otwiera finalny PDF w nowej karcie
     }
 
+    // Nowa funkcja: wyświetlenie podglądu inwestycji w popupie przy użyciu PDF.js
+    function showInvestmentPreview(investorName) {
+      // Filtrowanie slajdów pasujących do wybranej inwestycji (porównanie case-insensitive)
+      const matchingSlides = allSlides.filter(slide => toTitleCase(slide.investor) === investorName);
+      if (matchingSlides.length === 0) {
+        alert('Brak podglądu dla tej inwestycji.');
+        return;
+      }
+      // Ustawienie tytułu modala
+      document.getElementById('modalInvestmentName').textContent = investorName;
+      // Czyszczenie poprzednich podglądów
+      const previewsContainer = document.getElementById('modalPreviews');
+      previewsContainer.innerHTML = '';
+      // Dla każdego pasującego slajdu – renderujemy PDF na canvasie
+      matchingSlides.forEach(slide => {
+        const slideContainer = document.createElement('div');
+        slideContainer.style.marginBottom = '20px';
+        const canvas = document.createElement('canvas');
+        slideContainer.appendChild(canvas);
+        previewsContainer.appendChild(slideContainer);
+
+        pdfjsLib.getDocument(slide.file_url).promise.then(function(pdfDoc) {
+          // Renderujemy pierwszą stronę jako podgląd
+          pdfDoc.getPage(1).then(function(page) {
+            const viewport = page.getViewport({ scale: 1.5 });
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            const renderContext = {
+              canvasContext: canvas.getContext('2d'),
+              viewport: viewport
+            };
+            page.render(renderContext);
+          });
+        }).catch(function(error) {
+          console.error('Error loading PDF:', error);
+          slideContainer.innerHTML = 'Błąd ładowania podglądu PDF.';
+        });
+      });
+      // Wyświetlenie modala
+      document.getElementById('investmentPreviewModal').style.display = 'flex';
+    }
+
+    function closeInvestmentPreview() {
+      document.getElementById('investmentPreviewModal').style.display = 'none';
+    }
+
+    // Obsługa zdarzenia kliknięcia na nazwę inwestycji w tabeli (event delegation)
     document.addEventListener('DOMContentLoaded', async () => {
       await populateFilter('region', 'regionSelect');
       await populateFilter('industry', 'industrySelect');
@@ -692,6 +779,26 @@
       document.getElementById('applyFilters').addEventListener('click', updateSlidesTable);
       document.getElementById('resetFilters').addEventListener('click', resetFilters);
       document.getElementById('generatePDF').addEventListener('click', generatePDFDocument);
+
+      // Dodanie nasłuchiwania kliknięcia na komórkę z nazwą inwestycji
+      document.getElementById('slidesTableBody').addEventListener('click', function(e) {
+        let target = e.target;
+        if(target.classList.contains('investment-name') || (target.parentElement && target.parentElement.classList.contains('investment-name'))) {
+          const td = target.classList.contains('investment-name') ? target : target.parentElement;
+          const investorName = td.textContent.trim();
+          showInvestmentPreview(investorName);
+        }
+      });
+
+      // Nasłuchiwanie przycisku zamknięcia modala
+      document.getElementById('modalCloseBtn').addEventListener('click', closeInvestmentPreview);
+
+      // Zamknięcie modala po kliknięciu poza obszarem treści
+      document.getElementById('investmentPreviewModal').addEventListener('click', function(e) {
+        if(e.target === this) {
+          closeInvestmentPreview();
+        }
+      });
     });
   </script>
 </body>
