@@ -554,7 +554,7 @@
         tr.innerHTML = `
           <td class="investment-name" style="cursor: pointer;">${toTitleCase(slide.investor)}</td>
           <td>${toTitleCase(slide.region)}</td>
-          <td>${slide.area}</td>
+          <td>${Number(slide.area).toLocaleString('pl-PL')} m²</td>
           <td>${toTitleCase(slide.industry)}</td>
           <td><button class="btn btn-secondary" onclick="addProject(${slide.id}, '${slide.file_url}', '${toTitleCase(slide.investor)}')">Wybierz</button></td>
         `;
